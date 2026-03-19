@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Handwriting Font Maker</title>
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:16px;background:#f5f5f5}
+  h1{font-size:22px;margin-bottom:4px}
+  #name{width:100%;padding:8px;font-size:16px;margin-bottom:8px;border:1px solid #ccc;border-radius:6px}
+  #info{font-size:15px;font-weight:bold;margin:8px 0}
+  canvas{border:2px solid #333;border-radius:8px;background:#fff;display:block;touch-action:none;cursor:crosshair;width:100%;max-width:480px}
+  .row{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+  button{padding:10px 16px;font-size:14px;border:none;border-radius:6px;cursor:pointer;background:#ddd}
+  #btnSave{background:#6c63ff;color:#fff;flex:2}
+  #btnDown{background:#22c55e;color:#fff;width:100%;padding:14px;font-size:16px;margin-top:8px}
+  #btnDown:disabled{background:#999}
+  #progress{font-size:13px;color:#666;margin:4px 0}
+  .grid{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}
+  .gc{width:38px;height:38px;border:1px solid #ccc;border-radius:5px;display:flex;align-items:center;
+      justify-content:center;font-size:16px;cursor:pointer;background:#fff}
+  .gc.done{background:#d1fae5;border-color:#22c55e}
+  .gc.cur{background:#ede9fe;border-color:#6c63ff}
+  #size{width:100px}
+</style>
+</head>
+<body>
+<h1>✍️ Handwriting Font Maker</h1>
+<input id="name" placeholder="Font name (e.g. MyScript)" value="MyHandwriting">
+<div id="info">Draw: <b id="charLabel">A (Uppercase A)</b></div>
+<canvas id="c" height="340"></canvas>
+<div class="row">
+  <button onclick="undo()">↩ Undo</button>
+  <button onclick="clr()">🗑 Clear</button>
+  <label style="display:flex;align-items:center;gap:4px;font-size:13px">Size<input type="range" id="size" min="4" max="28" value="10"></label>
+  <button onclick="toggleEraser()" id="eraserBtn">🧹 Eraser</button>
+</div>
+<div class="row">
+  <button onclick="prev()">‹ Prev</button>
+  <button id="btnSave" onclick="saveAndNext()">Save &amp; Next ›</button>
+  <button onclick="skip()">Skip</button>
+</div>
+<div id="progress">0 / 63 saved</div>
+<div class="grid" id="grid"></div>
+<button id="btnDown" onclick="genFont()" disabled>⬇ Download Font (.ttf) — draw at least 1 letter first</button>
+
+<script>
+const CHARS=[...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'.split('').map(c=>({c,l:(c>='A'&&c<='Z'?'Uppercase ':'c'>='a'&&c<='z'?'Lowercase ':'Number ')+c})),
+  ...'.  ,  !  ?  \'  -  (  )  :  ;  /  &  @'.split('  ').map(c=>({c,l:c}))];
+let idx=0,saved={},strokes=[],cur=[],pw=10,eraser=false,drawing=false;
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+
+function resize(){canvas.width=canvas.offsetWidth;redraw()}
+window.addEventListener('resize',resize);setTimeout(resize,50);
+
+function redraw(){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // guidelines
+  ctx.strokeStyle='rgba(108,99,255,0.2)';ctx.lineWidth=1;
+  [0.12,0.45,0.75].forEach(y=>{ctx.beginPath();ctx.moveTo(0,canvas.height*y);ctx.lineTo(canvas.width,canvas.height*y);ctx.stroke()});
+  strokes.forEach(s=>drawS(s.pts,s.w,s.e));if(cur.length>1)drawS(cur,pw,eraser)}
+function drawS(pts,w,e){if(!pts.length)return;
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length-1;i++){const mx=(pts[i].x+pts[i+1].x)/2,my=(pts[i].y+pts[i+1].y)/2;ctx.quadraticCurveTo(pts[i].x,pts[i].y,mx,my)}
+  ctx.lineTo(pts[pts.length-1].x,pts[pts.length-1].y);
+  ctx.strokeStyle=e?'#fff':'#111';ctx.lineWidth=e?w*2.5:w;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke()}
+function pos(e){const r=canvas.getBoundingClientRect(),sx=canvas.width/r.width,sy=canvas.height/r.height,s=e.touches?e.touches[0]:e;
+  return{x:(s.clientX-r.left)*sx,y:(s.clientY-r.top)*sy}}
+canvas.addEventListener('mousedown',e=>{e.preventDefault();drawing=true;cur=[pos(e)]});
+canvas.addEventListener('mousemove',e=>{e.preventDefault();if(!drawing)return;cur.push(pos(e));redraw()});
+canvas.addEventListener('mouseup',e=>{e.preventDefault();if(!drawing)return;drawing=false;if(cur.length)strokes.push({pts:[...cur],w:pw,e:eraser});cur=[];redraw()});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();drawing=true;cur=[pos(e)]},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();if(!drawing)return;cur.push(pos(e));redraw()},{passive:false});
+canvas.addEventListener('touchend',e=>{e.preventDefault();if(!drawing)return;drawing=false;if(cur.length)strokes.push({pts:[...cur],w:pw,e:eraser});cur=[];redraw()},{passive:false});
+document.getElementById('size').addEventListener('input',e=>pw=+e.target.value);
+function toggleEraser(){eraser=!eraser;document.getElementById('eraserBtn').style.background=eraser?'#f87171':'#ddd'}
+function undo(){strokes.pop();redraw()}
+function clr(){strokes=[];cur=[];redraw()}
+function updateUI(){const it=CHARS[idx];document.getElementById('charLabel').textContent=`${it.c} (${it.l})`;
+  const n=Object.keys(saved).length;document.getElementById('progress').textContent=`${n} / ${CHARS.length} saved`;
+  document.getElementById('btnDown').disabled=n===0;
+  document.getElementById('btnDown').textContent=n===0?'⬇ Download Font — draw at least 1 letter first':`⬇ Download Font (.ttf) — ${n} characters`;
+  buildGrid()}
+function saveCur(){const ch=CHARS[idx].c;const ps=strokes.filter(s=>!s.e).map(s=>({pts:s.pts,w:s.w}));if(ps.length)saved[ch]=ps}
+function goTo(i){idx=Math.max(0,Math.min(CHARS.length-1,i));clr();updateUI()}
+function saveAndNext(){saveCur();goTo(idx+1)}
+function skip(){goTo(idx+1)}
+function prev(){goTo(idx-1)}
+function buildGrid(){const g=document.getElementById('grid');g.innerHTML='';
+  CHARS.forEach((it,i)=>{const d=document.createElement('div');d.className='gc'+(saved[it.c]?' done':'')+(i===idx?' cur':'');
+  d.textContent=it.c;d.title=it.l;d.onclick=()=>{idx=i;clr();updateUI()};g.appendChild(d)})}
+
+// Font generation
+function expand(pts,w){if(pts.length<2){const r=w/2,p=pts[0];return[{x:p.x-r,y:p.y-r},{x:p.x+r,y:p.y-r},{x:p.x+r,y:p.y+r},{x:p.x-r,y:p.y+r}]}
+  const L=[],R=[];for(let i=0;i<pts.length;i++){const c=pts[i],p=i>0?pts[i-1]:c,n=i<pts.length-1?pts[i+1]:c,dx=n.x-p.x,dy=n.y-p.y,l=Math.sqrt(dx*dx+dy*dy)||1,nx=-dy/l,ny=dx/l,h=w/2;L.push({x:c.x+nx*h,y:c.y+ny*h});R.push({x:c.x-nx*h,y:c.y-ny*h})}
+  return[...L,...[...R].reverse()]}
+function smooth(pts){if(pts.length<3)return pts;return pts.map((_,i)=>{let sx=0,sy=0,c=0;for(let j=Math.max(0,i-2);j<=Math.min(pts.length-1,i+2);j++){sx+=pts[j].x;sy+=pts[j].y;c++}return{x:sx/c,y:sy/c}})}
+
+function genFont(){
+  const name=document.getElementById('name').value.trim()||'MyHandwriting';
+  const btn=document.getElementById('btnDown');btn.disabled=true;btn.textContent='⏳ Building font…';
+  setTimeout(()=>{
+    try{
+      const UPM=1000,ASC=800,DESC=-200,BL=600,CH=550;
+      const np=new opentype.Path();np.moveTo(50,0);np.lineTo(50,ASC);np.lineTo(350,ASC);np.lineTo(350,0);np.close();
+      const glyphs=[new opentype.Glyph({name:'.notdef',unicode:0,advanceWidth:400,path:np})];
+      for(const[ch,strks]of Object.entries(saved)){
+        const sc=CH/canvas.width;const path=new opentype.Path();
+        for(const s of strks){if(!s.pts.length)continue;
+          const tr=s.pts.map(p=>({x:p.x*sc,y:BL-p.y*sc}));
+          const sm=smooth(tr);const ol=expand(sm,s.w*sc);if(ol.length<3)continue;
+          path.moveTo(ol[0].x,ol[0].y);for(let i=1;i<ol.length;i++)path.lineTo(ol[i].x,ol[i].y);path.close()}
+        let mx=300;for(const cmd of path.commands){if(cmd.x)mx=Math.max(mx,cmd.x);if(cmd.x1)mx=Math.max(mx,cmd.x1)}
+        glyphs.push(new opentype.Glyph({name:'uni'+ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0'),unicode:ch.codePointAt(0),advanceWidth:Math.max(200,mx+80),path}))}
+      const font=new opentype.Font({familyName:name,styleName:'Regular',unitsPerEm:UPM,ascender:ASC,descender:DESC,glyphs});
+      const ab=font.toArrayBuffer();
+      const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ab],{type:'font/ttf'}));a.download=name.replace(/\s+/g,'_')+'.ttf';a.click();
+      btn.textContent=`⬇ Download Font (.ttf) — ${Object.keys(saved).length} characters`;
+    }catch(e){alert('Error: '+e.message)}
+    btn.disabled=false;
+  },50)}
+
+updateUI();
+</script>
+</body>
+</html>
