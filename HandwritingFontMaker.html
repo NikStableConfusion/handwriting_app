@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>Handwriting Font Maker</title>
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f13; --surface: #1a1a22; --surface2: #22222e; --border: #2e2e3e;
+  --accent: #6c63ff; --accent-light: #8b84ff; --success: #22c55e;
+  --text: #f0f0f5; --text-dim: #888899; --radius: 16px; --radius-sm: 10px;
+}
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased; touch-action: none; }
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column;
+  opacity: 0; pointer-events: none; transition: opacity .25s; overflow-y: auto; }
+.screen.active { opacity: 1; pointer-events: all; }
+
+/* Welcome */
+.welcome-content { max-width: 420px; margin: auto; padding: 48px 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+.logo { font-size: 64px; }
+h1 { font-size: 36px; font-weight: 800; line-height: 1.1; }
+.tagline { font-size: 16px; color: var(--text-dim); line-height: 1.6; }
+.form-group { width: 100%; text-align: left; }
+.form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim);
+  margin-bottom: 8px; letter-spacing: .5px; text-transform: uppercase; }
+.form-group input { width: 100%; background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text); font-size: 17px; padding: 14px 16px;
+  outline: none; transition: border-color .2s; }
+.form-group input:focus { border-color: var(--accent); }
+.form-group input::placeholder { color: var(--text-dim); }
+.btn-primary { width: 100%; background: var(--accent); color: #fff; border: none;
+  border-radius: var(--radius); font-size: 17px; font-weight: 700; padding: 16px;
+  cursor: pointer; transition: background .2s, transform .1s; }
+.btn-primary:active { transform: scale(.98); }
+.btn-secondary { width: 100%; background: var(--surface); color: var(--text);
+  border: 1.5px solid var(--border); border-radius: var(--radius); font-size: 16px;
+  font-weight: 600; padding: 14px; cursor: pointer; }
+.btn-ghost { background: none; border: none; color: var(--text-dim); font-size: 15px;
+  cursor: pointer; padding: 8px 16px; text-decoration: underline; }
+.hint { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+
+/* Draw screen */
+#screen-draw { overflow: hidden; }
+.draw-header { display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
+  background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 12px; }
+.char-label { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.char-big { font-size: 36px; font-weight: 800; line-height: 1; }
+.char-name { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.progress-label { font-size: 13px; font-weight: 600; color: var(--accent-light); white-space: nowrap; }
+.icon-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); font-size: 18px; width: 40px; height: 40px; display: flex;
+  align-items: center; justify-content: center; cursor: pointer; transition: background .15s; flex-shrink: 0; }
+.icon-btn:active { background: var(--accent); }
+.progress-bar-wrap { height: 3px; background: var(--surface2); flex-shrink: 0; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-light)); transition: width .4s; }
+
+.canvas-area { position: relative; flex: 1; display: flex; align-items: center;
+  justify-content: center; background: var(--bg); overflow: hidden; }
+.guidelines { position: absolute; inset: 0; pointer-events: none;
+  display: flex; flex-direction: column; justify-content: space-between; padding: 10% 0; }
+.guideline { width: 100%; height: 1px; opacity: .18; }
+.guideline-top { background: var(--accent); }
+.guideline-mid { background: #fff; }
+.guideline-base { background: var(--accent); }
+#draw-canvas { display: block; cursor: crosshair; touch-action: none; border-radius: 8px; }
+.canvas-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  font-size: 13px; color: var(--text-dim); pointer-events: none; white-space: nowrap; transition: opacity .5s; }
+.canvas-hint.hidden { opacity: 0; }
+
+.draw-toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  background: var(--surface); border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tool-group { display: flex; gap: 6px; }
+.tool-btn { background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px;
+  color: var(--text-dim); width: 44px; height: 44px; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; transition: all .15s; font-size: 18px; }
+.tool-btn.active, .tool-btn:active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.size-group { display: flex; align-items: center; gap: 8px; flex: 1; }
+.size-label { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+.size-slider { flex: 1; accent-color: var(--accent); cursor: pointer; }
+
+.nav-bar { display: flex; gap: 8px; padding: 10px 16px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  background: var(--surface); flex-shrink: 0; }
+.nav-btn { flex: 1; background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text); font-size: 15px; font-weight: 600;
+  padding: 12px; cursor: pointer; transition: all .15s; }
+.btn-save { flex: 2; background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-save:active { background: var(--accent-light); }
+.btn-skip { color: var(--text-dim); }
+
+.fab { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 130px); right: 16px;
+  width: 54px; height: 54px; background: var(--success); border: none; border-radius: 50%;
+  color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(34,197,94,.4); font-size: 22px; z-index: 50; transition: transform .2s; }
+.fab:active { transform: scale(.92); }
+
+/* Grid modal */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(6px);
+  display: flex; align-items: flex-end; z-index: 100; }
+.modal.hidden { display: none; }
+.modal-content { background: var(--surface); border-radius: 24px 24px 0 0; width: 100%;
+  max-height: 85vh; overflow-y: auto; padding: 20px 16px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.modal-header h2 { font-size: 20px; font-weight: 700; }
+.modal-hint { font-size: 13px; color: var(--text-dim); margin-bottom: 16px; }
+.char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; }
+.char-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 20px; font-weight: 600; cursor: pointer; transition: all .15s; position: relative; }
+.char-cell.done { border-color: var(--success); background: rgba(34,197,94,.1); }
+.char-cell.current { border-color: var(--accent); background: rgba(108,99,255,.15); }
+.char-cell:active { transform: scale(.92); }
+.char-cell .dot { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--success); }
+
+/* Finish */
+.finish-content { max-width: 500px; margin: auto; padding: 40px 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 24px; text-align: center; }
+.finish-summary { font-size: 16px; color: var(--text-dim); }
+.preview-box { width: 100%; background: #fff; border-radius: var(--radius); padding: 20px; }
+.preview-label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+  color: #999; margin-bottom: 12px; text-align: left; }
+.font-preview-text { font-size: 22px; line-height: 1.6; color: #111; text-align: left; word-break: break-word; }
+.download-section { width: 100%; }
+.download-hint { font-size: 13px; color: var(--text-dim); margin-top: 10px; line-height: 1.6; }
+.usage-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+.usage-card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; text-align: left; }
+.usage-icon { font-size: 24px; margin-bottom: 8px; }
+.usage-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.usage-card p { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.usage-card strong { color: var(--text); }
+.finish-actions { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+@media (max-width: 400px) { .usage-cards { grid-template-columns: 1fr; } h1 { font-size: 28px; } }
+</style>
+</head>
+<body>
+
+<!-- WELCOME -->
+<div id="screen-welcome" class="screen active">
+  <div class="welcome-content">
+    <div class="logo">✍️</div>
+    <h1>Handwriting<br/>Font Maker</h1>
+    <p class="tagline">Turn your handwriting into a real font.<br/>Works in Canva, Notion, Word — everywhere.</p>
+    <div class="form-group">
+      <label>Your font name</label>
+      <input id="font-name-input" type="text" placeholder="e.g. MyScript" maxlength="40" />
+    </div>
+    <button class="btn-primary" id="btn-start">Start Drawing →</button>
+    <p class="hint">Works on iPhone, iPad (with Apple Pencil), and Mac.<br/>No installation needed — everything runs in this file.</p>
+  </div>
+</div>
+
+<!-- DRAW -->
+<div id="screen-draw" class="screen">
+  <header class="draw-header">
+    <button class="icon-btn" id="btn-back">←</button>
+    <div class="char-label">
+      <span id="char-display" class="char-big">A</span>
+      <span id="char-name" class="char-name">Uppercase A</span>
+    </div>
+    <div class="header-right">
+      <span id="progress-text" class="progress-label">0 / 63</span>
+      <button class="icon-btn" id="btn-open-grid">⊞</button>
+    </div>
+  </header>
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div>
+
+  <div class="canvas-area">
+    <div class="guidelines">
+      <div class="guideline guideline-top"></div>
+      <div class="guideline guideline-mid"></div>
+      <div class="guideline guideline-base"></div>
+    </div>
+    <canvas id="draw-canvas"></canvas>
+    <div class="canvas-hint" id="canvas-hint">Write the letter here</div>
+  </div>
+
+  <div class="draw-toolbar">
+    <div class="tool-group">
+      <button class="tool-btn active" id="btn-pen" title="Pen">✏️</button>
+      <button class="tool-btn" id="btn-eraser" title="Eraser">🧹</button>
+    </div>
+    <div class="size-group">
+      <label class="size-label">Size</label>
+      <input type="range" id="stroke-size" min="4" max="28" value="10" class="size-slider" />
+    </div>
+    <div class="tool-group">
+      <button class="tool-btn" id="btn-undo" title="Undo">↩️</button>
+      <button class="tool-btn" id="btn-clear" title="Clear">🗑️</button>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-btn" id="btn-prev">‹ Prev</button>
+    <button class="nav-btn btn-save" id="btn-save-next">Save &amp; Next ›</button>
+    <button class="nav-btn btn-skip" id="btn-skip">Skip</button>
+  </div>
+
+  <button class="fab" id="btn-generate-float" title="Download Font">⬇</button>
+</div>
+
+<!-- GRID MODAL -->
+<div id="modal-grid" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>All Characters</h2>
+      <button class="icon-btn" id="btn-close-grid">✕</button>
+    </div>
+    <p class="modal-hint">Tap a character to draw it. Green = saved.</p>
+    <div id="char-grid" class="char-grid"></div>
+  </div>
+</div>
+
+<!-- FINISH -->
+<div id="screen-finish" class="screen">
+  <div class="finish-content">
+    <div class="logo">🎉</div>
+    <h1>Font Ready!</h1>
+    <p id="finish-summary" class="finish-summary"></p>
+
+    <div class="preview-box">
+      <p class="preview-label">Preview</p>
+      <div id="font-preview" class="font-preview-text">The quick brown fox<br/>jumps over the lazy dog.<br/>0123456789</div>
+    </div>
+
+    <div class="download-section">
+      <button class="btn-primary" id="btn-download">⬇ Download Font (.ttf)</button>
+      <p class="download-hint">Works in Canva, Word, Pages, Mac, Windows, iPhone, and Android.</p>
+    </div>
+
+    <div class="usage-cards">
+      <div class="usage-card">
+        <div class="usage-icon">🎨</div>
+        <h3>Canva</h3>
+        <p><strong>Pro:</strong> Brand Hub → Fonts → Upload a font<br/><br/><strong>Free:</strong> Screenshot the preview, upload as image</p>
+      </div>
+      <div class="usage-card">
+        <div class="usage-icon">🍎</div>
+        <h3>iPhone / iPad</h3>
+        <p>Install via <strong>AnyFont</strong> or <strong>Fontcase</strong> from the App Store. Font works system-wide.</p>
+      </div>
+      <div class="usage-card">
+        <div class="usage-icon">💻</div>
+        <h3>Mac</h3>
+        <p>Double-click the .ttf file → click <strong>Install Font</strong>. Available in all apps instantly.</p>
+      </div>
+      <div class="usage-card">
+        <div class="usage-icon">📝</div>
+        <h3>Notion</h3>
+        <p>Install the font on your Mac first, then it shows up in any web tool that respects system fonts.</p>
+      </div>
+    </div>
+
+    <div class="finish-actions">
+      <button class="btn-secondary" id="btn-keep-drawing">Keep Drawing More →</button>
+      <button class="btn-ghost" id="btn-start-over">Start Over</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Characters ────────────────────────────────────────────────────
+const CHARS = [
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c => ({ char: c, label: `Uppercase ${c}` })),
+  ...'abcdefghijklmnopqrstuvwxyz'.split('').map(c => ({ char: c, label: `Lowercase ${c}` })),
+  ...'0123456789'.split('').map(c => ({ char: c, label: `Number ${c}` })),
+  { char: '.', label: 'Period' }, { char: ',', label: 'Comma' },
+  { char: '!', label: 'Exclamation' }, { char: '?', label: 'Question mark' },
+  { char: "'", label: 'Apostrophe' }, { char: '-', label: 'Hyphen' },
+  { char: '(', label: 'Left paren' }, { char: ')', label: 'Right paren' },
+  { char: ':', label: 'Colon' }, { char: ';', label: 'Semicolon' },
+  { char: '/', label: 'Slash' }, { char: '&', label: 'Ampersand' },
+  { char: '@', label: 'At sign' },
+];
+
+// ── State ─────────────────────────────────────────────────────────
+const S = {
+  fontName: 'MyHandwriting',
+  idx: 0,
+  saved: {},      // char → [{points, width}]
+  strokes: [],
+  current: [],
+  width: 10,
+  tool: 'pen',
+  drawing: false,
+};
+
+// ── Canvas ────────────────────────────────────────────────────────
+const canvas = document.getElementById('draw-canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  const area = canvas.parentElement;
+  const sz = Math.min(area.clientWidth - 32, area.clientHeight - 32, 520);
+  canvas.width = sz; canvas.height = sz;
+  redraw();
+}
+
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  S.strokes.forEach(s => drawStroke(s.points, s.width, s.color));
+  if (S.current.length > 1) drawStroke(S.current, S.width, penColor());
+}
+
+function drawStroke(pts, w, color) {
+  if (!pts.length) return;
+  if (pts.length === 1) {
+    ctx.beginPath();
+    ctx.arc(pts[0].x, pts[0].y, w/2, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill(); return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i].x + pts[i+1].x)/2, my = (pts[i].y + pts[i+1].y)/2;
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+  }
+  ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+  ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+function penColor() { return S.tool === 'eraser' ? '#ffffff' : '#111111'; }
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+  const src = e.changedTouches ? e.changedTouches[0] : e;
+  return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy };
+}
+
+canvas.addEventListener('mousedown', e => {
+  e.preventDefault(); S.drawing = true; S.current = [getPos(e)];
+  document.getElementById('canvas-hint').classList.add('hidden');
+});
+canvas.addEventListener('mousemove', e => {
+  e.preventDefault(); if (!S.drawing) return; S.current.push(getPos(e)); redraw();
+});
+canvas.addEventListener('mouseup', e => {
+  e.preventDefault(); if (!S.drawing) return; S.drawing = false;
+  if (S.current.length) S.strokes.push({ points: [...S.current], width: S.tool==='eraser' ? S.width*2.5 : S.width, color: penColor() });
+  S.current = []; redraw();
+});
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault(); S.drawing = true; S.current = [getPos(e)];
+  document.getElementById('canvas-hint').classList.add('hidden');
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault(); if (!S.drawing) return; S.current.push(getPos(e)); redraw();
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+  e.preventDefault(); if (!S.drawing) return; S.drawing = false;
+  if (S.current.length) S.strokes.push({ points: [...S.current], width: S.tool==='eraser' ? S.width*2.5 : S.width, color: penColor() });
+  S.current = []; redraw();
+}, { passive: false });
+
+// ── UI helpers ────────────────────────────────────────────────────
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function clearCanvas() {
+  S.strokes = []; S.current = []; redraw();
+  document.getElementById('canvas-hint').classList.remove('hidden');
+}
+
+function updateUI() {
+  const item = CHARS[S.idx];
+  document.getElementById('char-display').textContent = item.char === ' ' ? '␣' : item.char;
+  document.getElementById('char-name').textContent = item.label;
+  const done = Object.keys(S.saved).length;
+  document.getElementById('progress-text').textContent = `${done} / ${CHARS.length}`;
+  document.getElementById('progress-fill').style.width = `${done/CHARS.length*100}%`;
+}
+
+function saveCurrentGlyph() {
+  const char = CHARS[S.idx].char;
+  const penStrokes = S.strokes.filter(s => s.color !== '#ffffff').map(s => ({ points: s.points, width: s.width }));
+  if (penStrokes.length > 0) S.saved[char] = penStrokes;
+}
+
+function goTo(idx) {
+  S.idx = Math.max(0, Math.min(CHARS.length - 1, idx));
+  clearCanvas(); updateUI();
+}
+
+// ── Character Grid ────────────────────────────────────────────────
+function buildGrid() {
+  const grid = document.getElementById('char-grid');
+  grid.innerHTML = '';
+  CHARS.forEach((item, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'char-cell' + (S.saved[item.char] ? ' done' : '') + (i === S.idx ? ' current' : '');
+    cell.textContent = item.char === ' ' ? '␣' : item.char;
+    if (S.saved[item.char]) { const d = document.createElement('div'); d.className = 'dot'; cell.appendChild(d); }
+    cell.addEventListener('click', () => { S.idx = i; clearCanvas(); updateUI(); closeGrid(); });
+    grid.appendChild(cell);
+  });
+}
+function openGrid() { buildGrid(); document.getElementById('modal-grid').classList.remove('hidden'); }
+function closeGrid() { document.getElementById('modal-grid').classList.add('hidden'); }
+
+// ── Font Generation ───────────────────────────────────────────────
+function expandStroke(points, width) {
+  if (points.length < 2) {
+    const r = width/2, p = points[0];
+    return [{x:p.x-r,y:p.y-r},{x:p.x+r,y:p.y-r},{x:p.x+r,y:p.y+r},{x:p.x-r,y:p.y+r}];
+  }
+  const left = [], right = [];
+  for (let i = 0; i < points.length; i++) {
+    const curr = points[i];
+    const prev = i > 0 ? points[i-1] : curr;
+    const next = i < points.length-1 ? points[i+1] : curr;
+    const dx = next.x - prev.x, dy = next.y - prev.y;
+    const len = Math.sqrt(dx*dx + dy*dy) || 1;
+    const nx = -dy/len, ny = dx/len, hw = width/2;
+    left.push({ x: curr.x + nx*hw, y: curr.y + ny*hw });
+    right.push({ x: curr.x - nx*hw, y: curr.y - ny*hw });
+  }
+  const sp = points[0], ep = points[points.length-1];
+  const sdx = points[0].x - points[1].x, sdy = points[0].y - points[1].y;
+  const sl = Math.sqrt(sdx*sdx+sdy*sdy)||1;
+  const capS = [{x: sp.x + sdx/sl*(width/2), y: sp.y + sdy/sl*(width/2)}];
+  const edx = points[points.length-1].x - points[points.length-2].x;
+  const edy = points[points.length-1].y - points[points.length-2].y;
+  const el = Math.sqrt(edx*edx+edy*edy)||1;
+  const capE = [{x: ep.x + edx/el*(width/2), y: ep.y + edy/el*(width/2)}];
+  return [...capS, ...left, ...capE, ...[...right].reverse()];
+}
+
+function smooth(pts, w=2) {
+  if (pts.length <= w) return pts;
+  return pts.map((_, i) => {
+    let sx=0, sy=0, c=0;
+    for (let j=Math.max(0,i-w); j<=Math.min(pts.length-1,i+w); j++) { sx+=pts[j].x; sy+=pts[j].y; c++; }
+    return {x:sx/c, y:sy/c};
+  });
+}
+
+function downsample(pts, minD=3) {
+  if (pts.length<=2) return pts;
+  const r=[pts[0]];
+  for (let i=1; i<pts.length; i++) {
+    const p=r[r.length-1], dx=pts[i].x-p.x, dy=pts[i].y-p.y;
+    if (Math.sqrt(dx*dx+dy*dy)>=minD) r.push(pts[i]);
+  }
+  r.push(pts[pts.length-1]);
+  return r;
+}
+
+function buildGlyphPath(strokes, canvasSize) {
+  const scale = 550 / canvasSize; // capHeight 550 out of 1000 UPM
+  const baseline = 600;           // font units from bottom where baseline sits
+  const path = new opentype.Path();
+
+  for (const stroke of strokes) {
+    if (!stroke.points || stroke.points.length === 0) continue;
+    const transformed = stroke.points.map(p => ({
+      x: p.x * scale,
+      y: baseline - p.y * scale,
+    }));
+    const s = smooth(downsample(transformed, 2), 2);
+    const outline = expandStroke(s, (stroke.width||8) * scale);
+    if (outline.length < 3) continue;
+    path.moveTo(outline[0].x, outline[0].y);
+    for (let i = 1; i < outline.length; i++) path.lineTo(outline[i].x, outline[i].y);
+    path.close();
+  }
+  return path;
+}
+
+function generateFont() {
+  const name = S.fontName || 'MyHandwriting';
+  const notdefPath = new opentype.Path();
+  notdefPath.moveTo(50,0); notdefPath.lineTo(50,800); notdefPath.lineTo(350,800); notdefPath.lineTo(350,0); notdefPath.close();
+
+  const glyphs = [new opentype.Glyph({ name: '.notdef', unicode: 0, advanceWidth: 400, path: notdefPath })];
+
+  for (const [char, strokes] of Object.entries(S.saved)) {
+    const glyphPath = buildGlyphPath(strokes, canvas.width);
+    let maxX = 300;
+    for (const cmd of glyphPath.commands) {
+      if (cmd.x !== undefined) maxX = Math.max(maxX, cmd.x);
+      if (cmd.x1 !== undefined) maxX = Math.max(maxX, cmd.x1);
+    }
+    glyphs.push(new opentype.Glyph({
+      name: `uni${char.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')}`,
+      unicode: char.codePointAt(0),
+      advanceWidth: Math.max(200, maxX + 80),
+      path: glyphPath,
+    }));
+  }
+
+  const font = new opentype.Font({
+    familyName: name, styleName: 'Regular',
+    unitsPerEm: 1000, ascender: 800, descender: -200, glyphs,
+  });
+
+  // Download
+  const buf = font.download ? undefined : null;
+  const ab = font.toArrayBuffer();
+  const blob = new Blob([ab], { type: 'font/ttf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name.replace(/\s+/g,'_') + '.ttf';
+  a.click();
+  URL.revokeObjectURL(url);
+
+  // Live preview
+  try {
+    const ff = new FontFace('PreviewFont', ab);
+    ff.load().then(f => {
+      document.fonts.add(f);
+      document.getElementById('font-preview').style.fontFamily = "'PreviewFont', serif";
+    });
+  } catch(e) {}
+}
+
+// ── Events ────────────────────────────────────────────────────────
+document.getElementById('btn-start').addEventListener('click', () => {
+  S.fontName = document.getElementById('font-name-input').value.trim() || 'MyHandwriting';
+  show('screen-draw'); resize(); updateUI();
+});
+
+document.getElementById('btn-back').addEventListener('click', () => show('screen-welcome'));
+document.getElementById('btn-pen').addEventListener('click', () => {
+  S.tool='pen';
+  document.getElementById('btn-pen').classList.add('active');
+  document.getElementById('btn-eraser').classList.remove('active');
+});
+document.getElementById('btn-eraser').addEventListener('click', () => {
+  S.tool='eraser';
+  document.getElementById('btn-eraser').classList.add('active');
+  document.getElementById('btn-pen').classList.remove('active');
+});
+document.getElementById('btn-undo').addEventListener('click', () => { S.strokes.pop(); redraw(); });
+document.getElementById('btn-clear').addEventListener('click', clearCanvas);
+document.getElementById('stroke-size').addEventListener('input', e => { S.width = +e.target.value; });
+document.getElementById('btn-save-next').addEventListener('click', () => {
+  saveCurrentGlyph(); updateUI();
+  if (S.idx < CHARS.length - 1) goTo(S.idx + 1);
+  else { document.getElementById('finish-summary').textContent = `You've drawn ${Object.keys(S.saved).length} characters.`; show('screen-finish'); }
+});
+document.getElementById('btn-skip').addEventListener('click', () => {
+  if (S.idx < CHARS.length - 1) goTo(S.idx + 1);
+  else { document.getElementById('finish-summary').textContent = `You've drawn ${Object.keys(S.saved).length} characters.`; show('screen-finish'); }
+});
+document.getElementById('btn-prev').addEventListener('click', () => { if (S.idx > 0) goTo(S.idx - 1); });
+document.getElementById('btn-open-grid').addEventListener('click', openGrid);
+document.getElementById('btn-close-grid').addEventListener('click', closeGrid);
+document.getElementById('modal-grid').addEventListener('click', e => { if (e.target === document.getElementById('modal-grid')) closeGrid(); });
+document.getElementById('btn-generate-float').addEventListener('click', () => {
+  saveCurrentGlyph();
+  document.getElementById('finish-summary').textContent = `You've drawn ${Object.keys(S.saved).length} characters.`;
+  show('screen-finish');
+});
+document.getElementById('btn-download').addEventListener('click', () => {
+  const btn = document.getElementById('btn-download');
+  btn.textContent = '⏳ Generating…'; btn.disabled = true;
+  setTimeout(() => {
+    try { generateFont(); } catch(e) { alert('Error: ' + e.message); }
+    btn.textContent = '⬇ Download Font (.ttf)'; btn.disabled = false;
+  }, 50);
+});
+document.getElementById('btn-keep-drawing').addEventListener('click', () => { show('screen-draw'); resize(); updateUI(); });
+document.getElementById('btn-start-over').addEventListener('click', () => {
+  if (!confirm('Start over? All your drawings will be lost.')) return;
+  Object.keys(S.saved).forEach(k => delete S.saved[k]);
+  S.idx = 0; clearCanvas(); show('screen-welcome');
+});
+
+window.addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
