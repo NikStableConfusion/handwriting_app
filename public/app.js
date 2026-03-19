@@ -788,7 +788,7 @@ function detectCornerMarkers(imgData, w, h) {
 // ── 5. Extract & Process a Single Cell ───────────────────────────
 // Warps a character cell from the uploaded photo into a 400×400 workspace
 // using the inverse homography, then runs the full processing pipeline.
-function extractAndProcessCell(photoCtx, photoW, photoH, invH, cellX, cellY, cellW, cellH) {
+function extractAndProcessCell(photoImgData, photoW, photoH, invH, cellX, cellY, cellW, cellH) {
   const SIZE = 400;
   const PAD  = 20;
   const tmp = document.createElement('canvas');
@@ -800,11 +800,7 @@ function extractAndProcessCell(photoCtx, photoW, photoH, invH, cellX, cellY, cel
   // Map each pixel in the SIZE×SIZE workspace back to photo coordinates
   // via the inverse homography (template coords → photo coords)
   const scaleX = cellW / SIZE, scaleY = cellH / SIZE;
-  const srcData = tmp.getImageData(0, 0, SIZE, SIZE);
-
-  // Compute destination pixels: for each (u,v) in output, find (x,y) in photo
-  // Template coords of cell pixel (u,v): (cellX + u*scaleX, cellY + v*scaleY)
-  const photoImgData = photoCtx.getImageData(0, 0, photoW, photoH);
+  const srcData = tctx.getImageData(0, 0, SIZE, SIZE);
 
   for (let v = 0; v < SIZE; v++) {
     for (let u = 0; u < SIZE; u++) {
@@ -902,7 +898,7 @@ async function processTemplateImage(file) {
     await sleep(0);
 
     const { strokes, canvasSize } = extractAndProcessCell(
-      photoCtx, photoW, photoH, invH, cx, cy, CELL_W, CELL_H
+      photoImgData, photoW, photoH, invH, cx, cy, CELL_W, CELL_H
     );
     if (strokes.length > 0) {
       batchGlyphs.push({ character: CHARS[i].char, strokes, canvasSize });
