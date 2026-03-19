@@ -67,13 +67,31 @@ function drawS(pts,w,e){if(!pts.length)return;
     if(i<pts.length-2){const mx=(n.x+pts[i+2].x)/2,my=(n.y+pts[i+2].y)/2;ctx.quadraticCurveTo(n.x,n.y,mx,my)}
     else ctx.lineTo(n.x,n.y);
     ctx.strokeStyle=e?'#fff':'#111';ctx.lineWidth=e?w*2.5:w*pressure;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke()}}
-function pos(e){const r=canvas.getBoundingClientRect(),sx=canvas.width/r.width,sy=canvas.height/r.height;
-  const pressure=(e.pointerType==='pen'&&e.pressure>0)?e.pressure:1;
-  return{x:(e.clientX-r.left)*sx,y:(e.clientY-r.top)*sy,p:pressure}}
-canvas.addEventListener('pointerdown',e=>{e.preventDefault();canvas.setPointerCapture(e.pointerId);drawing=true;cur=[pos(e)]});
-canvas.addEventListener('pointermove',e=>{e.preventDefault();if(!drawing)return;cur.push(pos(e));redraw()});
-canvas.addEventListener('pointerup',e=>{e.preventDefault();if(!drawing)return;drawing=false;if(cur.length)strokes.push({pts:[...cur],w:pw,e:eraser});cur=[];redraw()});
-canvas.addEventListener('pointercancel',e=>{drawing=false;cur=[];redraw()});
+let activeId=null;
+function pt(cx,cy,pr){const r=canvas.getBoundingClientRect(),sx=canvas.width/r.width,sy=canvas.height/r.height;return{x:(cx-r.left)*sx,y:(cy-r.top)*sy,p:pr||1}}
+function penPressure(e){return(e.pointerType==='pen'&&e.pressure>0)?e.pressure:1}
+// Pointer events — handles Apple Pencil, mouse, and modern touch
+canvas.addEventListener('pointerdown',e=>{
+  e.preventDefault();if(activeId!=null)return;
+  try{canvas.setPointerCapture(e.pointerId)}catch(_){}
+  activeId=e.pointerId;drawing=true;cur=[pt(e.clientX,e.clientY,penPressure(e))]});
+canvas.addEventListener('pointermove',e=>{
+  e.preventDefault();if(!drawing||e.pointerId!==activeId)return;
+  cur.push(pt(e.clientX,e.clientY,penPressure(e)));redraw()});
+canvas.addEventListener('pointerup',e=>{
+  e.preventDefault();if(!drawing||e.pointerId!==activeId)return;
+  drawing=false;activeId=null;if(cur.length)strokes.push({pts:[...cur],w:pw,e:eraser});cur=[];redraw()});
+canvas.addEventListener('pointercancel',e=>{drawing=false;activeId=null;cur=[];redraw()});
+// Touch events fallback — for older Safari where pointer events may not fire for Pencil
+canvas.addEventListener('touchstart',e=>{
+  if(activeId!=null)return;e.preventDefault();
+  drawing=true;cur=[pt(e.touches[0].clientX,e.touches[0].clientY,1)]},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  if(activeId!=null)return;e.preventDefault();if(!drawing)return;
+  cur.push(pt(e.touches[0].clientX,e.touches[0].clientY,1));redraw()},{passive:false});
+canvas.addEventListener('touchend',e=>{
+  if(activeId!=null)return;e.preventDefault();if(!drawing)return;
+  drawing=false;if(cur.length)strokes.push({pts:[...cur],w:pw,e:eraser});cur=[];redraw()},{passive:false});
 document.getElementById('size').addEventListener('input',e=>pw=+e.target.value);
 function toggleEraser(){eraser=!eraser;document.getElementById('eraserBtn').style.background=eraser?'#f87171':'#ddd'}
 function undo(){strokes.pop();redraw()}
