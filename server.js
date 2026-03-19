@@ -225,6 +225,24 @@ app.delete('/api/session/:fontId', (req, res) => {
   res.json({ ok: true });
 });
 
+// Batch save glyphs (used by template photo import)
+app.post('/api/glyphs-batch', (req, res) => {
+  const { fontId, glyphs } = req.body;
+  if (!fontId || !Array.isArray(glyphs)) {
+    return res.status(400).json({ error: 'fontId and glyphs array required' });
+  }
+  if (!fontSessions[fontId]) {
+    fontSessions[fontId] = { glyphs: {}, name: fontId };
+  }
+  let saved = 0;
+  for (const { character, strokes, canvasSize } of glyphs) {
+    if (!character || !strokes) continue;
+    fontSessions[fontId].glyphs[character] = { strokes, canvasSize: canvasSize || 400 };
+    saved++;
+  }
+  res.json({ ok: true, saved, total: Object.keys(fontSessions[fontId].glyphs).length });
+});
+
 // Generate and stream font as WOFF (for web use / Canva API)
 app.post('/api/generate/woff', (req, res) => {
   const { fontId, fontName } = req.body;
