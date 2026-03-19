@@ -848,13 +848,23 @@ async function processTemplateImage(file) {
   showProcessing('Loading image…', 0);
 
   const img = await loadImage(file);
-  const photoW = img.naturalWidth, photoH = img.naturalHeight;
 
-  // Draw photo to an offscreen canvas
+  // Downsample large photos (iPad cameras can be 12MP+) to max 2500px
+  // to avoid hanging the browser with huge ImageData arrays.
+  const MAX_DIM = 2500;
+  let photoW = img.naturalWidth, photoH = img.naturalHeight;
+  let scale = 1;
+  if (Math.max(photoW, photoH) > MAX_DIM) {
+    scale = MAX_DIM / Math.max(photoW, photoH);
+    photoW = Math.round(photoW * scale);
+    photoH = Math.round(photoH * scale);
+  }
+
+  // Draw photo to an offscreen canvas (at downsampled size)
   const photoCanvas = document.createElement('canvas');
   photoCanvas.width = photoW; photoCanvas.height = photoH;
   const photoCtx = photoCanvas.getContext('2d');
-  photoCtx.drawImage(img, 0, 0);
+  photoCtx.drawImage(img, 0, 0, photoW, photoH);
   const photoImgData = photoCtx.getImageData(0, 0, photoW, photoH);
 
   showProcessing('Detecting template corners…', 5);
@@ -886,10 +896,10 @@ async function processTemplateImage(file) {
     const cy = GRID_Y + row * (CELL_H + GAP);
 
     const pct = 10 + Math.round((i / CHARS.length) * 85);
-    if (i % 5 === 0) showProcessing(`Processing "${CHARS[i].char}" (${i+1}/${CHARS.length})…`, pct);
+    showProcessing(`Processing "${CHARS[i].char}" (${i+1}/${CHARS.length})…`, pct);
 
-    // Yield to browser between cells to avoid blocking UI
-    if (i % 10 === 0) await sleep(0);
+    // Yield to browser on every character to keep iPad responsive
+    await sleep(0);
 
     const { strokes, canvasSize } = extractAndProcessCell(
       photoCtx, photoW, photoH, invH, cx, cy, CELL_W, CELL_H
