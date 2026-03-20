@@ -124,20 +124,24 @@ function downsample(points, minDist = 3) {
 // Each stroke: { points: [{x,y},...], width: number }
 // The coordinate system here has y increasing upward (font space).
 // Canvas has y increasing downward, so we flip y.
-function buildGlyphPath(strokes, canvasSize, glyphHeight, glyphBaseline) {
-  const scale = glyphHeight / canvasSize;
+function buildGlyphPath(strokes, canvasSize, ascender) {
+  // The cell extraction skips a label area at the top (18%) and a bottom pad (20px).
+  // We map the bottom of the writing area → font y=0 (baseline),
+  // and the top of the writing area → font y=ascender.
+  const PAD        = 20;
+  const charStartY = Math.floor(canvasSize * 0.18);  // top of writing area
+  const charEndY   = canvasSize - PAD;               // bottom of writing area = baseline
+  const writingH   = charEndY - charStartY;
+  const scale      = ascender / writingH;
+
   const combinedPath = new opentype.Path();
 
   for (const stroke of strokes) {
     if (!stroke.points || stroke.points.length === 0) continue;
 
-    // Transform points: flip Y, scale, and shift baseline
     const transformed = stroke.points.map((p) => ({
-      x: p.x * scale,
-      // Flip Y: canvas y=0 is top, font y=0 is baseline
-      // canvas y goes 0 (top) to canvasSize (bottom)
-      // font y: baseline=0, ascender at top
-      y: glyphBaseline - p.y * scale,
+      x: (p.x - PAD) * scale,         // remove left padding offset, then scale
+      y: (charEndY - p.y) * scale,    // flip Y: bottom of cell → 0, top → ascender
     }));
 
     const smoothed = smoothPoints(downsample(transformed, 2), 2);
@@ -147,7 +151,6 @@ function buildGlyphPath(strokes, canvasSize, glyphHeight, glyphBaseline) {
     if (outline.length < 3) continue;
 
     const subPath = polygonToPath(outline);
-    // Merge commands into combined path
     for (const cmd of subPath.commands) {
       combinedPath.commands.push(cmd);
     }
@@ -285,15 +288,15 @@ function buildFont(session, overrideName) {
 
   for (const [char, data] of Object.entries(session.glyphs)) {
     const { strokes, canvasSize } = data;
-    const glyphPath = buildGlyphPath(strokes, canvasSize || 400, capHeight, baseline);
+    const glyphPath = buildGlyphPath(strokes, canvasSize || 400, ascender);
 
-    let maxX = 300;
+    let maxX = 0;
     for (const cmd of glyphPath.commands) {
       if (cmd.x !== undefined) maxX = Math.max(maxX, cmd.x);
       if (cmd.x1 !== undefined) maxX = Math.max(maxX, cmd.x1);
       if (cmd.x2 !== undefined) maxX = Math.max(maxX, cmd.x2);
     }
-    const advanceWidth = Math.max(200, maxX + 80);
+    const advanceWidth = Math.max(100, maxX + 60);
     const unicode = char.codePointAt(0);
 
     glyphs.push(new opentype.Glyph({
